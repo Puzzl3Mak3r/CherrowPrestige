@@ -1,11 +1,11 @@
 services:
   - type: web
-    name: prestige-bot
+    name: cherrow-prestige-bot
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: python3 main.py
     envVars:
       - key: DISCORD_TOKEN
-        value: your-token-here
+        sync: false
       - key: OCR_SPACE_API_KEY
-        value: your-api-key-here
+        sync: false
