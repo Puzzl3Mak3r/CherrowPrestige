@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# render-build.sh
-
-# Install Tesseract
+# Install system dependencies needed for EasyOCR
 apt-get update
-apt-get install -y tesseract-ocr
+apt-get install -y libgl1 libglib2.0-0 libsm6 libxrender1 libxext6
