@@ -1,5 +1,5 @@
 discord.py
-pytesseract
+easyocr
 pillow
 aiohttp
 matplotlib
