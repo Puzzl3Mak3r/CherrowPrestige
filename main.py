@@ -81,9 +81,11 @@ async def on_ready():
 @app_commands.describe(
     image="Upload your Cookie Run: Kingdom screenshot here.")
 async def cpt(interaction: discord.Interaction, image: discord.Attachment):
+    print(f"Interaction received at: {interaction.created_at}")
     try:
         await interaction.response.defer()
     except discord.errors.NotFound:
+        print("⚠️ Interaction expired before defer!")
         return  # Too late to respond, silently ignore
 
     if not image.filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
