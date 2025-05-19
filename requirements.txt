@@ -1,6 +1,4 @@
-discord.py
-easyocr
-pillow
 aiohttp
+discord.py
 matplotlib
-flask
+Pillow
