@@ -8,6 +8,7 @@ server_thread = None
 
 @app.route('/')
 def home():
+    print("Ping received!")
     return "I'm alive!"
 
 def run():
