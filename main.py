@@ -81,7 +81,10 @@ async def on_ready():
 @app_commands.describe(
     image="Upload your Cookie Run: Kingdom screenshot here.")
 async def cpt(interaction: discord.Interaction, image: discord.Attachment):
-    await interaction.response.defer()
+    try:
+        await interaction.response.defer()
+    except discord.errors.NotFound:
+        return  # Too late to respond, silently ignore
 
     if not image.filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
         await interaction.followup.send(
