@@ -4,25 +4,18 @@ import os
 import json
 from discord import app_commands
 from discord.ext import commands
-from PIL import Image
 from io import BytesIO
 import aiohttp
 import matplotlib.pyplot as plt
 from datetime import datetime
-import easyocr
-import numpy as np
 
-# Keep alive
+# Keep alive for web service on Render
 from keep_alive import keep_alive
+
 keep_alive()
 
-# Initialize EasyOCR reader
-reader = easyocr.Reader(['en'])
-
-# File to store prestige data
 DATA_FILE = "prestige_data.json"
 
-# Load saved prestige data from file or return empty list
 def load_prestige_data():
     try:
         with open(DATA_FILE, "r") as f:
@@ -30,32 +23,45 @@ def load_prestige_data():
     except FileNotFoundError:
         return []
 
-# Save prestige data list to file
 def save_prestige_data(data):
     with open(DATA_FILE, "w") as f:
         json.dump(data, f)
 
-# OCR to extract prestige from image, checking for 'cherrowYT'
-def extract_prestige(image: Image.Image) -> str | None:
-    rgb_image = image.convert("RGB")
-    image_np = np.array(rgb_image)
-    results = reader.readtext(image_np, detail=0)
-    text = " ".join(results)
+async def extract_prestige(image_bytes: bytes) -> str | None:
+    api_key = os.getenv("OCR_SPACE_API_KEY")
+    if not api_key:
+        raise ValueError("OCR_SPACE_API_KEY environment variable not set")
 
-    if "cherrowyt" not in text.lower():
+    url = "https://api.ocr.space/parse/image"
+    headers = {"apikey": api_key}
+    data = {"language": "eng", "isOverlayRequired": False}
+
+    async with aiohttp.ClientSession() as session:
+        form = aiohttp.FormData()
+        form.add_field("file", image_bytes, filename="image.jpg", content_type="image/jpeg")
+        for key, value in data.items():
+            form.add_field(key, str(value))
+
+        async with session.post(url, data=form, headers=headers) as resp:
+            result = await resp.json()
+            try:
+                parsed_text = result["ParsedResults"][0]["ParsedText"]
+            except (KeyError, IndexError):
+                return "❌ OCR failed to extract text."
+
+    if "cherrowyt" not in parsed_text.lower():
         return None
 
-    match = re.search(r"Prestige[:\s]*([0-9,]+)", text, re.IGNORECASE)
+    match = re.search(r"Prestige[:\s]*([0-9,]+)", parsed_text, re.IGNORECASE)
     if match:
         return match.group(1)
 
-    match_alt = re.search(r"cherrowyt\s+(\d{1,3}(?:,\d{3})*)", text.lower())
+    match_alt = re.search(r"cherrowyt\s+(\d{1,3}(?:,\d{3})*)", parsed_text.lower())
     if match_alt:
         return match_alt.group(1)
 
     return "Could not find a prestige value."
 
-# Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -69,8 +75,9 @@ async def on_ready():
     except Exception as e:
         print("Error syncing commands:", e)
 
-# /cpt command - upload screenshot, extract and save prestige
-@bot.tree.command(name="cpt", description="Cherrow Prestige Tracker - Upload a screenshot to extract Prestige.")
+@bot.tree.command(
+    name="cpt",
+    description="Cherrow Prestige Tracker - Upload a screenshot to extract Prestige.")
 @app_commands.describe(image="Upload your Cookie Run: Kingdom screenshot here.")
 async def cpt(interaction: discord.Interaction, image: discord.Attachment):
     print(f"Interaction received at: {interaction.created_at}")
@@ -88,11 +95,10 @@ async def cpt(interaction: discord.Interaction, image: discord.Attachment):
         async with session.get(image.url) as resp:
             if resp.status == 200:
                 img_data = await resp.read()
-                img = Image.open(BytesIO(img_data))
-                prestige = extract_prestige(img)
+                prestige = await extract_prestige(img_data)
 
                 if prestige is None:
-                    await interaction.followup.send("❌ Screenshot does not appear to be from cherrowYT. Please upload a valid screenshot.")
+                    await interaction.followup.send("❌ Screenshot does not appear to be from cherrowYT.")
                     return
                 elif prestige == "Could not find a prestige value.":
                     await interaction.followup.send("❌ Could not find a prestige value in the screenshot.")
@@ -104,10 +110,10 @@ async def cpt(interaction: discord.Interaction, image: discord.Attachment):
                 if data:
                     latest_prestige = data[-1]["prestige"]
                     if new_prestige_val < latest_prestige:
-                        await interaction.followup.send("❌ Update screenshot: new prestige is lower than the last logged value.")
+                        await interaction.followup.send("❌ Update rejected: prestige is lower than last recorded.")
                         return
                     elif new_prestige_val == latest_prestige:
-                        await interaction.followup.send("ℹ️ This amount of prestige is already logged.")
+                        await interaction.followup.send("ℹ️ This prestige is already logged.")
                         return
 
                 data.append({
@@ -120,8 +126,9 @@ async def cpt(interaction: discord.Interaction, image: discord.Attachment):
             else:
                 await interaction.followup.send("❌ Failed to download the image.")
 
-# /displayprestige command - display current prestige + graph over time
-@bot.tree.command(name="displayprestige", description="Display current prestige and graph prestige progress over time.")
+@bot.tree.command(
+    name="displayprestige",
+    description="Display current prestige and graph prestige progress over time.")
 async def displayP(interaction: discord.Interaction):
     data = load_prestige_data()
     if not data:
@@ -130,6 +137,7 @@ async def displayP(interaction: discord.Interaction):
 
     data.sort(key=lambda x: x["timestamp"])
     current_prestige = data[-1]["prestige"]
+
     timestamps = [datetime.fromisoformat(d["timestamp"]) for d in data]
     prestiges = [d["prestige"] for d in data]
 
@@ -147,11 +155,11 @@ async def displayP(interaction: discord.Interaction):
     plt.close()
 
     file = discord.File(fp=buffer, filename="prestige_graph.png")
-    msg = f"# Current Prestige: `{current_prestige:,}`\n## To update, use `/cpt` in chat."
+    msg = f"# Current Prestige: `{current_prestige:,}`\n## To update, use `/cpt`."
 
     await interaction.response.send_message(content=msg, file=file)
 
-# Run bot with token from environment variable
+# Run bot
 token = os.getenv("DISCORD_TOKEN")
 if not token:
     print("ERROR: DISCORD_TOKEN environment variable not set.")
