@@ -1,0 +1,6 @@
+discord.py
+pytesseract
+pillow
+aiohttp
+matplotlib
+flask
