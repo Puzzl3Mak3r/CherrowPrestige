@@ -2,9 +2,10 @@ services:
   - type: web
     name: prestige-bot
     env: python
-    buildCommand: ./render-build.sh
-    startCommand: python main.py
-    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 main.py
     envVars:
       - key: DISCORD_TOKEN
-        value: your_bot_token_here
+        value: your-token-here
+      - key: OCR_SPACE_API_KEY
+        value: your-api-key-here
